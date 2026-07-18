@@ -1,0 +1,32 @@
+services:
+  backend:
+    build: ./backend
+    container_name: optimuscert-optimusdb
+    restart: unless-stopped
+    environment:
+      - PORT=4000
+      - DATA_DIR=/app/data
+      - JWT_SECRET=${JWT_SECRET:-change-this-in-production}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@exam.local}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - AI_MODEL=${AI_MODEL:-claude-3-5-sonnet-latest}
+    volumes:
+      - exam-data:/app/data
+    expose:
+      - "4000"
+    # Uncomment to hit the API directly from the host for debugging:
+    # ports:
+    #   - "4000:4000"
+
+  frontend:
+    build: ./frontend
+    container_name: optimuscert-web
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${APP_PORT:-8080}:80"
+
+volumes:
+  exam-data:
