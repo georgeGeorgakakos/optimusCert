@@ -4,7 +4,6 @@
 
 OptimusCert is a Microsoft-exam-style test platform with a timed **Exam mode**, a **Practice mode** with instant feedback, an admin studio to build exams (drag-and-drop builder), AI **and** rule-based PDF import, an analytics dashboard, printable certificates, and a portable `.cfexam` file format. It ships as two Docker containers — one `docker compose up` and it runs.
 
-It comes pre-loaded with a real **65-question Microsoft AB-731 “AI Transformation Leader”** practice exam so you can try everything immediately.
 
 > **Built on OptimusDB research.** OptimusCert is the applied result of research into **OptimusDB**, a small purpose-built data + assessment engine for testing platforms. See [About OptimusDB](#-about-optimusdb-the-engine) below.
 
