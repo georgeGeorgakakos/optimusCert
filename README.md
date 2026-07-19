@@ -66,27 +66,43 @@ Stop with `Ctrl+C`, then `docker compose down` (`-v` also wipes the data volume)
 
 ---
 
-## 🧠 About OptimusDB (the engine)
+## 🧠 Data backend — powered by OptimusDB
 
-**OptimusDB** is the data + assessment engine behind OptimusCert, and this project is the applied result of that research. Rather than bolt a generic ORM onto the app, the engine is a small, purpose-built layer that owns the three things a certification platform actually needs.
+OptimusCert stores **all of its data in [OptimusDB](https://github.com/georgeGeorgakakos/optimusdb)** — the decentralized database (a SQL engine over SQLite, running on libp2p/IPFS) that this project’s research is based on. The backend talks to OptimusDB’s **SQL‑over‑HTTP** interface (`POST /swarmkb/command` with the `sqldml` command), so OptimusCert’s tables live in **OptimusDB’s SQLite**, not a local file.
 
-1. **A typed question model.** Every question — regardless of type — is stored as a compact JSON document (`data`) alongside a `type`, `domain`, and `points`. The engine defines exactly one canonical shape per type (single, multi, dragdrop, hotspot, dropdown), which keeps the builder, the grader, the importer, and the `.cfexam` format all speaking the same language.
-2. **A deterministic grading core.** Grading is pure and centralized in `services/grading.js`: given a question document and a response, it returns a verdict. The same function powers timed submission, practice-mode single-question checks, and analytics — so a score can never disagree with itself.
-3. **Attempt analytics.** Each attempt persists a per-question `detail` record, which the analytics layer rolls up into pass rates, score distributions, per-domain accuracy, and hardest-question rankings without extra bookkeeping.
+OptimusCert’s tables are namespaced with an **`oc_` prefix** (`oc_users`, `oc_exams`, `oc_questions`, `oc_attempts`) so they never collide with OptimusDB’s own internal catalog tables (OptimusDB already ships a `users` table for its DID/credentials system).
 
-Under the hood OptimusDB persists to an embedded **SQLite** database (via `better-sqlite3`) stored in a Docker volume, so it is zero-config and file-portable — but the app only ever talks to the engine’s API, so the storage substrate is an implementation detail.
+The data layer is pluggable via `DB_BACKEND`:
+
+| `DB_BACKEND` | Behaviour |
+|--------------|-----------|
+| `optimusdb` *(default in compose)* | Every read/write runs as SQL against OptimusDB over HTTP. The schema and seed data are created there automatically on first run. |
+| `sqlite` | Falls back to a local embedded SQLite file (no OptimusDB needed) — handy for offline dev. |
 
 ```
-┌────────────┐    /api/*     ┌─────────────────────┐
-│ OptimusCert│ ─────────────▶│  OptimusDB engine   │
-│  React SPA │  (nginx proxy)│  Node/Express API   │
-│  nginx :80 │               │  grading · analytics│
-└────────────┘               └──────────┬──────────┘
-   :8080 host                           │ embedded
-                                   ┌─────▼─────┐
-                                   │  SQLite   │  (docker volume: exam-data)
-                                   └───────────┘
+┌────────────┐   /api/*    ┌──────────────────┐   SQL over HTTP    ┌─────────────────┐
+│ OptimusCert│ ───────────▶│ OptimusCert API  │ ─────────────────▶ │    OptimusDB    │
+│  React SPA │ (nginx px)  │ Node/Express     │  POST /swarmkb/    │  SQL engine ─▶  │
+│  nginx :80 │             │ grading·analytics│  command (sqldml)  │     SQLite      │
+└────────────┘             └──────────────────┘                    └─────────────────┘
+   :8080 host                                                     :8089 (in compose)
 ```
+
+The app still owns the **typed question model** (one canonical JSON shape per type), the **deterministic grading core** (`services/grading.js`, shared by exam submit, practice checks, and analytics), and the **attempt‑analytics** rollups — but persistence is delegated to OptimusDB.
+
+### Migrating existing data into OptimusDB
+
+If you already ran on the `sqlite` backend and want to move that data over, a one‑shot tool extracts everything from the local SQLite and loads it into OptimusDB’s SQLite:
+
+```bash
+cd backend
+OPTIMUSDB_URL=http://localhost:18089 npm run migrate:optimusdb
+# add MIGRATE_WIPE=1 to clear the OptimusDB tables first
+```
+
+It creates the schema, copies `users / exams / questions / attempts`, then verifies row counts on both sides.
+
+> **Validation note.** The OptimusDB driver, the migration tool, and the full app flow (seed → take exam → grade → analytics) were verified end‑to‑end against a stand‑in that reproduces OptimusDB’s real `sqldml` response envelope — SELECT rows arrive wrapped as `{ "status": 200, "data": { "records": [ … ] } }`, which the driver unwraps. The `sqlite` backend remains a guaranteed‑working fallback via `DB_BACKEND=sqlite`.
 
 ---
 
@@ -168,8 +184,13 @@ optimuscert/
 ├── docker-compose.yml
 ├── README.md
 ├── docs/screenshots/           # the mock-up images in this README
-├── backend/                    # OptimusDB engine (Node/Express + SQLite)
+├── backend/                    # Node/Express API
+│   ├── scripts/migrate-to-optimusdb.mjs   # SQLite → OptimusDB migration
 │   └── src/
+│       ├── store/              # pluggable data layer (sqlite + optimusdb drivers)
+│       │   ├── index.js        #   driver switch, param inlining
+│       │   ├── optimusClient.js#   OptimusDB SQL-over-HTTP client
+│       │   └── schema.js       #   schema + first-run seed
 │       ├── services/grading.js # deterministic grading core
 │       ├── routes/             # auth, exams, questions, attempts, import, analytics
 │       └── seeds/ab731.json    # the pre-loaded AB-731 exam

@@ -6,7 +6,8 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "dev": "node --watch src/index.js",
+    "migrate:optimusdb": "node scripts/migrate-to-optimusdb.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.1",

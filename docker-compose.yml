@@ -1,11 +1,30 @@
 services:
-  backend:
-    build: ./backend
+  # OptimusDB — decentralized database (SQL engine over SQLite) used as the
+  # system of record. Image: your published GHCR build.
+  optimusdb:
+    image: ghcr.io/georgegeorgakakos/optimusdb:latest
     container_name: optimuscert-optimusdb
     restart: unless-stopped
+    # HTTP API :8089, libp2p :4001, gateway :5001
+    ports:
+      - "${OPTIMUSDB_HTTP_PORT:-18089}:8089"
+    volumes:
+      - optimusdb-data:/root/.optimusdb
+    # If your image needs flags, add e.g.: command: ["-http", "-http-port=8089", "-swarmkb=swarmkb"]
+
+  backend:
+    build: ./backend
+    container_name: optimuscert-backend
+    restart: unless-stopped
+    depends_on:
+      - optimusdb
     environment:
       - PORT=4000
       - DATA_DIR=/app/data
+      - DB_BACKEND=${DB_BACKEND:-optimusdb}
+      - OPTIMUSDB_URL=${OPTIMUSDB_URL:-http://optimusdb:8089}
+      - OPTIMUSDB_CONTEXT=${OPTIMUSDB_CONTEXT:-swarmkb}
+      - OPTIMUSDB_STARTUP_RETRIES=${OPTIMUSDB_STARTUP_RETRIES:-60}
       - JWT_SECRET=${JWT_SECRET:-change-this-in-production}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@exam.local}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
@@ -15,9 +34,6 @@ services:
       - exam-data:/app/data
     expose:
       - "4000"
-    # Uncomment to hit the API directly from the host for debugging:
-    # ports:
-    #   - "4000:4000"
 
   frontend:
     build: ./frontend
@@ -30,3 +46,4 @@ services:
 
 volumes:
   exam-data:
+  optimusdb-data:

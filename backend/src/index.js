@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 
-import './db.js'; // initializes schema + seed
+import { initStore, BACKEND } from './db.js';
 import authRoutes from './routes/auth.js';
 import examRoutes from './routes/exams.js';
 import questionRoutes from './routes/questions.js';
@@ -14,7 +14,7 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '5mb' }));
 
-app.get('/api/health', (req, res) => res.json({ ok: true, service: 'OptimusDB', ts: Date.now() }));
+app.get('/api/health', (req, res) => res.json({ ok: true, service: 'OptimusDB', backend: BACKEND, ts: Date.now() }));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/exams', examRoutes);
@@ -29,4 +29,12 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => console.log(`[OptimusDB] OptimusCert API listening on :${PORT}`));
+
+initStore()
+  .then(() => {
+    app.listen(PORT, () => console.log(`[OptimusDB] OptimusCert API listening on :${PORT} (backend: ${BACKEND})`));
+  })
+  .catch((e) => {
+    console.error('[OptimusDB] Failed to initialize data store:', e.message);
+    process.exit(1);
+  });
